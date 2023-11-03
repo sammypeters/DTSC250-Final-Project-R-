@@ -1,0 +1,479 @@
+---
+output:
+  word_document: default
+  html_document: default
+  pdf_document: default
+---
+
+#project title
+
+Samantha Peters
+
+```{r, echo=FALSE}
+library(tidyverse)
+```
+
+```{r, echo=FALSE}
+library(ppcor)
+```
+
+```{r, echo=FALSE}
+parkPerm<- read_csv("Parking Permit Data Set - Data.csv")
+```
+
+```{r}
+head(parkPerm)
+```
+
+##Categorizing Variables:
+
+```{r, echo = FALSE}
+library(DataExplorer)
+```
+```{r}
+plot_intro(parkPerm)
+```
+
+Because we're interested in how Eastern's parking permit costs compares against other school's and whether or not it is fair, let's figure out what the school's price is.
+
+```{r}
+Eastern <- parkPerm %>%
+  filter(Name == "Eastern University") %>%
+  dplyr::select(SchoolNum, Name, resStudCost, comStudCost, facultyCost, staffCost)
+
+Eastern
+```
+
+
+#Data Cleaning 
+
+There was an error in the data input so that Strayer University has 111,111 as input for a lot of the variables. Because this skews the data, I'm getting rid of the school entirely. 
+
+```{r}
+parkPerm3 <- parkPerm %>%
+  filter(Name != "Strayer Univeristy, Center City")
+parkPerm3
+```
+
+Additionally, there was an error with data entry that caused the staaffCost column to be cast as chars when it should be dbls. This causes plots produced with this variable to come out wrong. The following code casts the variable to a dbl. 
+
+```{r}
+staffCost <- as.numeric(parkPerm3$staffCost)
+```
+
+#Exploring The Potential Relationship Between Average Permit Cost & Type
+
+Is there a relationship between the type of school and how much a parking permit cost? Is it cheaper for community schools but more expensive for private schools?
+```{r}
+parkPerm %>%
+  group_by(Type) %>%
+  summarise(avgPermCost = round(mean(resStudCost, na.rm = TRUE), 2))
+```
+It seems like there may be an outlier causing the Private average to be unreasonably large. Let's explore that. 
+
+```{r}
+parkPerm3 %>%
+  filter(Type == "Private") %>%
+  dplyr::select(Type, Name, resStudCost) %>%
+  arrange(desc(resStudCost))
+```
+From this we can see that University of Pennsylvania is causing there to be a huge outlier of $2,339. Let's get rid of this outlier and then create a new groupby. 
+
+```{r}
+parkPerm3 %>%
+  filter(Name != "University of Pennsylvania") %>%
+  group_by(Type) %>%
+  summarise(avgPermCost2 = round(mean(resStudCost, na.rm = TRUE), 2))
+```
+From this we can see that the outlier really did affect the overall average for Private schools. More importantly, Eastern's parking permit cost is $345 for resident students which is more than 2 times the average for private schools. 
+
+```{r}
+parkPerm3 %>%
+  filter(Name != "University of Pennsylvania") %>%
+  group_by(Type) %>%
+  summarise(avgPermCost3 = round(mean(comStudCost, na.rm = TRUE), 2))
+```
+The above code gives the average parking permit costs for commuter students when grouped by Type. From this, we can see that Eastern's commuter price of $290 is signicantly more than the average for Private schools and Public schools.
+
+
+```{r}
+ggplot(parkPerm3) +
+  geom_point(aes(SchoolNum, resStudCost, color = Type), positon = "jitter")
+
+  
+```
+
+From this graph, we can tell that Eastern's residential parking permits are not that extreme of a cost compared to other schools. Eastern is school 64 and it's point is pretty close to schools next to it. Moreover, the school's near it are all private schools like Eastern. 
+
+```{r}
+ggplot(parkPerm3) +
+  geom_point(aes(SchoolNum, comStudCost, color = Type), positon = "jitter")
+```
+Similiar to the previous graph, there are a lot of school's with parking permits near the price of Eastern or more than Eastern's commuter parking permits. However, there are a lot of school's -- Public, Private, Community, and Technical -- that have cheaper parking permits. 
+
+These graphs help us get a general idea of where the majority of the data lies and how Eastern compares to the rest of the data. We can see from the group_bys that Eastern's parking permits are greater than the average commuter and residential parking permits. Moreover, it doesn't seem like one type of school consistently has higher parking permit costs.
+
+
+#Relationship Between Distance and Cost
+
+The Distance column records how far the school is from Eastern in miles. Is there a relationship between Distance and Cost? Are the school's closest to Eastern similar in cost?
+
+```{r}
+schoolNum <- as.character(parkPerm3$SchoolNum)
+```
+
+
+
+```{r}
+ggplot(parkPerm3) +
+  geom_point(aes(Distance, resStudCost, color = schoolNum), show.legend = FALSE)
+
+```
+
+This graph shows the Distance vs. Resident Parking Permit cost. But from the graph there appears to be no correlation. Eastern is the point at (0, 325) and we can tell that the point below it must be Cabrini University with a significantly less parking permit cost. It appears that the only school with a similar parking permit cost for residents is about 12/13 miles away. This might because Philidelphia is about that far away. 
+
+
+```{r}
+cor.test(parkPerm3$Distance, parkPerm3$resStudCost)
+```
+As suspected, there is a very weak correlation between Distance and parking permit cost. However, from the graph above the school's with greater parking permit costs tend to be plotted around 12 - 20 miles away from Eastern which is about where school's in Philadelphia are. So, do school's in Philly have greater parking permit costs?
+
+```{r}
+ggplot(parkPerm3) +
+  geom_point(aes(Distance, resStudCost, color = schoolNum), show.legend = FALSE) +
+  facet_wrap(~Location)
+```
+From this graph, we can see that a a little more than half of the Philadelphia schools are about the cost of Eastern's residential parking permit costs or greater. 
+
+#Do Urban Schools Have Greater Parking Permit Costs?
+
+From the last graph, we see that the Philadelphia schools have high parking permit costs. Is this true for most urban schools?
+
+```{r}
+parkPerm3 %>%
+  filter(camType != "NA" & Name != 'University of Pennsylvania') %>%
+  group_by(camType) %>%
+  summarise(avgResParkPerm = round(mean(resStudCost, na.rm = TRUE),2))
+```
+From this group_by, we can see that the average residential student parking permit for urban schools is almost 2x greater than suburban schools. 
+
+```{r}
+parkPerm3 %>%
+  filter(camType != "NA" & Name != "University of Pennsylvania") %>%
+  group_by(camType) %>%
+  summarise(avgResParkPerm = round(mean(resStudCost, na.rm = TRUE),2)) %>%
+  ggplot() +
+  geom_bar(aes(camType, avgResParkPerm, fill = "pink"), stat = "identity", show.legend = FALSE)
+```
+
+
+
+```{r}
+parkPerm3 %>%
+  filter(camType != "NA" & Name != "University of Pennsylvania") %>%
+  group_by(camType) %>%
+  summarise(avgComParkPerm = round(mean(comStudCost, na.rm = TRUE),2))
+```
+From this group_by, we can see that urban parking permits for commuter students are also signficantly greater than suburban schools. We can visualize this with the following bar graph.
+
+```{r}
+parkPerm3 %>%
+  filter(camType != "NA" & Name != "University of Pennsylvania") %>%
+  group_by(camType) %>%
+  summarise(avgResParkPerm = round(mean(comStudCost, na.rm = TRUE),2)) %>%
+  ggplot() +
+  geom_bar(aes(camType, avgResParkPerm, fill = "green"), stat = "identity", show.legend = FALSE)
+```
+
+```{r}
+ggplot(parkPerm3, aes(SchoolNum, resStudCost, color = camType)) +
+  geom_point()
+```
+Overall, we can see from these plots and groupby's that the urban campuses in this data set have higher parking permit costs for students on average.
+
+#Is There A Relationship Between Size and Cost
+
+We expect to see that smaller schools have lower parking permit costs and bigger schools have larger parking permit costs because there is more competition for parking spots. 
+
+```{r}
+ggplot(parkPerm3, aes(SchoolNum, resStudCost)) +
+  geom_point() +
+  facet_wrap(~Size)
+```
+
+```{r}
+parkPerm3 %>%
+  group_by(Size) %>%
+  summarise(medSizeResCost = median(resStudCost, na.rm = TRUE))
+```
+
+From the group_by above, we can see that Large schools have a median resident parking permit cost about 4x greater than medium and small schools. Which is what I expected. 
+
+```{r}
+parkPerm3 %>%
+  group_by(Size) %>%
+  summarise(medSizeResCost = median(resStudCost, na.rm = TRUE)) %>%
+  ggplot() +
+  geom_bar(aes(Size, medSizeResCost, fill = "blue"), stat = "identity", show.legend = FALSE)
+```
+From the above scatter plot, groupby, and bar chart, we can see that the large schools in this data set have the highest median resident parking permit. 
+
+
+```{r}
+parkPerm3 %>%
+  group_by(Size) %>%
+  summarise(medSizeComCost = median(comStudCost, na.rm = TRUE))
+```
+
+
+
+
+```{r}
+parkPerm3 %>%
+  group_by(Size) %>%
+  summarise(medSizeComCost = median(comStudCost, na.rm = TRUE)) %>%
+  ggplot() +
+  geom_bar(aes(Size, medSizeComCost, fill = "blue"), stat = "identity", show.legend = FALSE)
+```
+From the above groupby and bar graph, we can see that the large schools in this data set have higher medians for commuter parking permits than small and medium schools. 
+
+```{r}
+ggplot(parkPerm3, aes(SchoolNum, resStudCost, color = camType)) +
+  geom_point() +
+  facet_wrap(~Size)
+```
+
+Earlier we established that urban campuses in this data set tend to have higher parking permit costs. The above faceted scatter plot shows that a majority of the large schools are also urban campuses. A majority of the small campus are also suburban campuses which have the lowest median and average parking permit costs. 
+
+
+#How Does Enrollment Effect Paking Permit Costs
+
+Since large schools have higher median parking permits, is there a correlation between enrollment and parking permit costs?
+
+The following group_by ensures that the enrollments we are considering are from 2023 to ensure continuity.
+```{r}
+enrollmentParkPerm <- parkPerm3 %>%
+  filter(enYear == 2023)
+```
+
+```{r}
+ggplot(enrollmentParkPerm) +
+  geom_point(aes(Enrollment, resStudCost), color = "magenta", position = "jitter")
+```
+
+
+```{r}
+cor.test(enrollmentParkPerm$Enrollment, enrollmentParkPerm$resStudCost)
+```
+
+Enrollment and resident parking permits gives us a moderately positive correlation of .47087. It also produces a p-value of .00375 which means that this is significant. 
+
+```{r}
+ggplot(enrollmentParkPerm) +
+  geom_point(aes(Enrollment, comStudCost), positon = "jitter", color = "blue")
+```
+
+```{r}
+cor.test(enrollmentParkPerm$Enrollment, enrollmentParkPerm$comStudCost)
+```
+Enrollment and commuter parking permit gives us a moderately strong positive correlation of .42. This suggests that as enrollment increases the cost of permits may also increase. Additionally, the p-value is .009355 which shows that this is significant. 
+
+Since it is significant, we can run linear regression.
+
+```{r}
+model1 <- lm(resStudCost~Enrollment, data = enrollmentParkPerm)
+
+summary(model1)
+```
+Linear regression gives us an intercept of 79.501 and a slope of .0185 for enrollment. From this we get a multiple r-squared of .2217 which means that 22.1% of the variance in parking permit costs can be explained by the enrollment. This isn't a huge number but does show that enrollment explains a good amount of variance in the parking permit costs. However, the Adjusted R-squared is only .1988 which suggests that enrollment might not improve the model more than how we would expect chance to effect the model. Additionally, the p-value is .00375 which means that enrollment has a signficant effect on parking permit costs. Lastly, our F-statistic of 9.686 on 1 and 34 degrees of freedom shows that our predictor variable, Enrollment, is significantly related to our response variable, resident parking permit costs. 
+
+##Our model for how enrollment should effect resident parking permit costs:
+
+resident parking permit price = 79.501 + .2217(Enrollment)
+
+So, based off this model, what should Eastern's parking permit cost for resident students?
+```{r}
+parkPerm3 %>%
+  filter(SchoolNum == 64) %>%
+  dplyr::select(Enrollment)
+```
+```{r}
+79.501 + (.2217 * 2670)
+```
+Based off this model, we get a huge price for a parking permit. It's almost twice the amount of Eastern's current parking permit price for resident students. 
+
+Say there's a school with 100 students.
+```{r}
+79.501 + (.2217 * 100)
+```
+Say there is a school with 40,000 students.
+```{r}
+79.501 + (.2217 * 40000)
+```
+
+Overall, I would say that while this model is statistically signficant it does not produce realistic parking permit prices.
+
+#How Does Tuition Effect Parking Permit Prices
+
+```{r}
+ggplot(parkPerm3, aes(outStateTuition, resStudCost)) + 
+  geom_point() + 
+  geom_smooth(se = FALSE)
+```
+
+```{r}
+ggplot(parkPerm3, aes(inStateTuition, resStudCost)) + 
+  geom_point() + 
+  geom_smooth(se = FALSE)
+```
+Overall, these above graphs have slightly moderate positive correlations. 
+
+```{r}
+parkPerm5 <- parkPerm3 %>%
+  filter(inStateTuition != "NA" & outStateTuition != "NA" & resStudCost != "NA") %>%
+  dplyr::select(inStateTuition, outStateTuition, resStudCost)
+```
+
+```{r}
+cor(parkPerm5)
+```
+Resident student cost has a moderate positive correlation with in state tuition with a correlation of .416. Resident student cost has moderate positive correlation with out of state tuition with a correlation of .467. Meaning, that as tuition increases, parking permit cost also increases. 
+
+
+```{r}
+model2 <- lm(resStudCost ~ inStateTuition + outStateTuition, data = parkPerm5)
+summary(model2)
+```
+This model gives us a Multiple R-squared of .2416 which means that 24.2% of the variance is accounted for by our predictor tuition variables. The model is statistically significant because the p-value is .0045 and F-statistic of 6.213 on 2 and 39 DF. 
+
+This regression gives us the following model:
+
+resident parking permit cost = -306.48 - .014(inStateTuition) + .028(outStateTuition)
+
+```{r}
+parkPerm3 %>%
+  filter(Name == "Eastern University") %>%
+  dplyr::select(inStateTuition, outStateTuition)
+```
+So, based off our model, Eastern's parking permit would be:
+```{r}
+-306.48 - (.014 * 34706) + (0.028 * 34706)
+```
+
+Say there is a school with an in-state tuition of 17,000 and an out-of-state tuition of 48,000. 
+
+```{r}
+-306.48 - (.014 * 17000) + (0.028 * 48000)
+```
+In conclusion, there appears to be a slight relationship between tuition and parking permit prices, but the produced model does not create reasonable parking permit costs for resident students. 
+
+
+
+#Is There a Relationship Between Median Alumni Salary and Parking Permit Cost?
+
+```{r}
+parkPerm3 %>%
+  dplyr::select(Name, medStudSalary, resStudCost, comStudCost) %>%
+  arrange(desc(medStudSalary))
+```
+
+```{r}
+parkPerm3 %>%
+  dplyr::select(Name, medStudSalary, resStudCost, comStudCost) %>%
+  arrange(desc(resStudCost))
+
+```
+
+```{r}
+parkPerm3 %>%
+  dplyr::select(Name, comStudCost) %>%
+  arrange(desc(comStudCost))
+```
+
+
+From a lot of the other plots in this project, we see that University of Pennsylvania has the highest parking permit cost and, from the above group_by, we see that it also has the highest median student salary. From these group_by's we also see that a few of the school's with the highest median student salary also have the highest parking permit costs.It's also important to note that Eastern has the 6th greatest parking permit price for resident students and the 5th greatest parking permit price for commuter students in this data set. 
+
+```{r}
+cor.test(parkPerm3$resStudCost, parkPerm3$medStudSalary)
+```
+There is a moderately positive correlation of .533 between resident parking permit costs and median student salaries. The p-value, .00033, suggests that this is significant. 
+
+
+```{r}
+model3 <- lm(resStudCost~medStudSalary, data = parkPerm3) 
+summary(model3)
+```
+Very generally we can conclude that the above model is statistically signficant as it has a p-value of .00033.
+
+The function gives us the following model:
+resident parking permit cost = -4.754e+02 + 1.450e-02(medStudSalary)
+
+Based off Eastern's median student salary:
+```{r}
+- 475.4 + (.0145 * 42500)
+```
+The above model gives us a reasonable number!
+
+#Using Multiple Predictors 
+
+Since we've determined that there is a slight correlation between enrollment and parking permit costs, tuition and parking permit costs, and median student salaries and parking permit cost, how do all of these predictors effect parking permit costs?
+
+```{r}
+model4 <- lm(resStudCost~Enrollment + inStateTuition + outStateTuition + medStudSalary, data = parkPerm3)
+
+summary(model4)
+```
+This model has a multiple R-squared of .467 meaning that about 47 percent of the variability in resident parking permit costs is accounted for by our predictors Enrollment, tuition, and median student salary. This is greater than the previous single predictor models.  For example, the median student salary model had an R-squared of 28% and the enrollment model had an R-squared of 22%. The multiple predictor model for the tuitions had a multiple r-squared of 24%. Therefore, the inclusion of these predictors accounts for more variation in resident parking permit costs. More importantly, we have a p-value of .0001532 which is very small and means that the model is significant. This gives us the following model:
+
+resident parking permit cost = -316.7 + .02151(enrollment) + .03071(inStateTuition) - .02744(outStateTuition) + .007410(medStudSalary)
+
+
+So based off this model, Eastern's resident parking permit should be:
+```{r}
+(-316.7) + (.02151 * 2670) + (.03071 * 34706) - (.02744 * 34706) + (.00741 * 24625)
+```
+
+```{r}
+library(lm.beta)
+```
+
+```{r}
+lm.beta(model4)
+```
+
+This function tells us that as Enrollment, inStateTuition, and medStudSalary increases by one SD, parking permit costs for resident students increases by .556, 1.346, .273 SDs respectively. Conversely, as outStateTuition increases by one standard deviation, resident parking permit costs will decrease by 1.039 standard deviations. Overall, inStateTuition is the most significant predictor.  
+
+
+
+#Conclusion
+
+This project began with cleaning some data. Namely, by getting rid of Strayer University which had several discrepancies. Next, I explored the data. Many of my fellow students at Eastern University resent the parking permit price because we believe that it is unreasonable and greater than what other students in the area or paying. My initial data exploration revealed that Eastern's resident and commuter parking permit prices are above average than those in the Delaware Valley and Philadelphia area.
+
+There's no real relationship between distance and cost, but I did see that there is a relationship between the campus type, the size of the school, and the enrollment and parking permit costs. For instance, urban campuses and large campuses tend to have higher average and median parking permit prices.
+
+When it came to running analyses, enrollment, tuition, and median student salary had moderately positive correlations on resident parking permit prices. However, when each was used in a single predictor model, they didn't create the most reliable parking permit prices. When they were used to create a multiple predictor model, the model was more significant and generated more accurate parking permit prices. Based off this model, Eastern's parking permit should be about $36. Of course, this model does not take into account various other factors like a school's facility budget and other constraints. However, this project can conclude that Eastern's parking permit prices are not neccesarily fairly priced relative to other similar schools in the area and that might be why so few students are buying parking permits. 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
